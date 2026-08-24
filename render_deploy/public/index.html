@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="My PC Shop - ร้านขายคอมพิวเตอร์ โน้ตบุ๊ก การ์ดจอ ระดับพรีเมียม">
+  <title>My PC Shop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/jpeg" href="images/logo.jpg">
+</head>
+
+<body>
+
+  <header class="topbar" id="topbar">
+    <div class="topbar-inner">
+      <a class="topbar-logo" href="#" onclick="goHome();return false">
+        <img src="images/logo.jpg" alt="My PC Shop" class="logo-img">
+        <span class="logo-text">MY PC SHOP</span>
+      </a>
+      <nav class="topbar-nav" id="topbar-nav">
+        <button class="top-nav-btn active" data-tab="home" id="tab-home">หน้าแรก</button>
+        <button class="top-nav-btn" data-tab="orders" id="tab-orders">คำสั่งซื้อ</button>
+        <button class="top-nav-btn" data-tab="credits" id="tab-credits">เครดิต</button>
+      </nav>
+      <button class="mobile-menu-btn" id="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
+    </div>
+  </header>
+
+  <main id="app-main">
+
+    <section class="page active" id="home-page">
+
+      <div class="banner-wrapper">
+        <img src="images/hero_banner.png" alt="Gaming Setup" class="banner-img">
+        <div class="banner-fade"></div>
+      </div>
+
+      <div class="container">
+
+        <div class="stats-strip">
+          <div class="stat-item">
+            <span class="stat-num">18+</span>
+            <span class="stat-label">สินค้าพรีเมียม</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-num">20+</span>
+            <span class="stat-label">แบรนด์ชั้นนำ</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-num">24/7</span>
+            <span class="stat-label">บริการหลังการขาย</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-num">฿0</span>
+            <span class="stat-label">ค่าจัดส่งทั่วไทย</span>
+          </div>
+        </div>
+
+        <div class="section-header">
+          <h2 class="section-title">สินค้าทั้งหมด</h2>
+          <p class="section-sub" style="color: gold;">เลือกดูสินค้าตามหมวดหมู่ที่คุณต้องการ</p>
+        </div>
+
+        <div class="filter-bar" id="filter-bar">
+          <button class="filter-btn active" data-filter="all" onclick="filterProducts('')">ทั้งหมด</button>
+        </div>
+
+        <div class="products-grid" id="products-grid"></div>
+
+        <div class="section-header" style="margin-top:60px;">
+          <h2 class="section-title">แบรนด์พาร์ทเนอร์</h2>
+          <p class="section-sub" style="color: gold;">เราคัดสรรสินค้าจากแบรนด์ชั้นนำระดับโลก</p>
+        </div>
+
+        <div class="brand-marquee">
+          <div class="brand-track brand-track-left">
+            <div class="brand-chip">ASUS</div>
+            <div class="brand-chip">MSI</div>
+            <div class="brand-chip">GIGABYTE</div>
+            <div class="brand-chip">NVIDIA</div>
+            <div class="brand-chip">AMD</div>
+            <div class="brand-chip">Intel</div>
+            <div class="brand-chip">Corsair</div>
+            <div class="brand-chip">Kingston</div>
+            <div class="brand-chip">Noctua</div>
+            <div class="brand-chip">Seagate</div>
+            <div class="brand-chip">ASUS</div>
+            <div class="brand-chip">MSI</div>
+            <div class="brand-chip">GIGABYTE</div>
+            <div class="brand-chip">NVIDIA</div>
+            <div class="brand-chip">AMD</div>
+            <div class="brand-chip">Intel</div>
+            <div class="brand-chip">Corsair</div>
+            <div class="brand-chip">Kingston</div>
+            <div class="brand-chip">Noctua</div>
+            <div class="brand-chip">Seagate</div>
+          </div>
+        </div>
+        <div class="brand-marquee">
+          <div class="brand-track brand-track-right">
+            <div class="brand-chip">Logitech</div>
+            <div class="brand-chip">Razer</div>
+            <div class="brand-chip">HyperX</div>
+            <div class="brand-chip">Samsung</div>
+            <div class="brand-chip">Western Digital</div>
+            <div class="brand-chip">SteelSeries</div>
+            <div class="brand-chip">Cooler Master</div>
+            <div class="brand-chip">EVGA</div>
+            <div class="brand-chip">ZOTAC</div>
+            <div class="brand-chip">be quiet!</div>
+            <div class="brand-chip">Logitech</div>
+            <div class="brand-chip">Razer</div>
+            <div class="brand-chip">HyperX</div>
+            <div class="brand-chip">Samsung</div>
+            <div class="brand-chip">Western Digital</div>
+            <div class="brand-chip">SteelSeries</div>
+            <div class="brand-chip">Cooler Master</div>
+            <div class="brand-chip">EVGA</div>
+            <div class="brand-chip">ZOTAC</div>
+            <div class="brand-chip">be quiet!</div>
+          </div>
+        </div>
+
+      </div>
+
+      <footer class="site-footer">
+        <div class="container">
+          <div class="footer-grid">
+            <div class="footer-col">
+              <div class="footer-logo-row">
+                <img src="images/logo.jpg" alt="Logo" class="footer-logo-img">
+                <span class="footer-logo-text">MY PC SHOP</span>
+              </div>
+              <p class="footer-desc" style="color: white;">ร้านขายคอมพิวเตอร์และอุปกรณ์ไอทีระดับพรีเมียม จัดส่งทั่วประเทศไทย</p>
+            </div>
+            <div class="footer-col">
+              <h4>หมวดหมู่</h4>
+              <a href="#" onclick="filterProducts('');return false">คอมพิวเตอร์ตั้งโต๊ะ</a>
+              <a href="#" onclick="filterProducts('');return false">โน้ตบุ๊ก</a>
+              <a href="#" onclick="filterProducts('');return false">การ์ดจอ</a>
+              <a href="#" onclick="filterProducts('');return false">แรม (RAM)</a>
+              <a href="#" onclick="filterProducts('');return false">ฮาร์ดดิสก์/SSD</a>
+              <a href="#" onclick="filterProducts('');return false">ระบายความร้อน</a>
+            </div>
+            <div class="footer-col">
+              <h4>บริการ</h4>
+              <a href="#">จัดส่งฟรีทั่วไทย</a>
+              <a href="#">รับประกันสินค้า</a>
+              <a href="#">บริการหลังการขาย</a>
+            </div>
+            <div class="footer-col">
+              <h4>ติดต่อเรา</h4>
+              <a href="#">contact@mypcshop.co.th</a>
+              <a href="#">02-xxx-xxxx</a>
+              <a href="#">Line: @mypcshop</a>
+            </div>
+          </div>
+          <div class="footer-bottom">
+            <span>© 2026 My PC Shop.</span>
+          </div>
+        </div>
+      </footer>
+
+    </section>
+
+    <section class="page" id="order-page">
+      <div class="container sub-page"></div>
+    </section>
+
+    <section class="page" id="credits-page">
+      <div class="container sub-page">
+        <div class="credits-header">
+          <h1 class="credits-title">ทีมนักพัฒนา</h1>
+          <p class="credits-sub">ผู้สร้างและพัฒนา My PC Shop</p>
+          <a href="/admin" target="_blank" class="btn-config" style="text-decoration:none;">🔐 ระบบจัดการ (Admin)</a>
+        </div>
+
+        <div class="credits-grid" id="credits-grid"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="modal-overlay" id="product-modal">
+    <div class="modal-content" id="modal-body"></div>
+  </div>
+
+  <div class="modal-overlay confirm-modal" id="confirm-modal"></div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
