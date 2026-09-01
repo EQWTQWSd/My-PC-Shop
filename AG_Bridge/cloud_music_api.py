@@ -1,6 +1,6 @@
 """
-Cloud Music Bridge API v1.0 (24/7 Hosted Service)
-Supports YouTube Search, MP3 Audio Extraction, Job Tracking, and Direct HTTP Audio Streaming for Roblox Clients.
+Cloud Music Bridge API v1.2 (24/7 Hosted Service - Enhanced YouTube Cloud Bypass)
+Supports YouTube Search, MP3 Audio Extraction with Android Client Bypass, Shared Job Tracking across Gunicorn Workers, and Direct HTTP Audio Streaming.
 """
 
 import os
@@ -15,11 +15,27 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Storage Directory for Converted MP3 Files
 AUDIO_CACHE_DIR = os.path.join(os.getcwd(), "audio_cache")
-os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
+JOBS_CACHE_DIR = os.path.join(AUDIO_CACHE_DIR, "jobs")
+os.makedirs(JOBS_CACHE_DIR, exist_ok=True)
 
-DOWNLOAD_JOBS = {}  # job_id -> {"status": "downloading"|"completed"|"failed", "filename": "...", "progress": "0%"}
+def save_job_status(job_id, data):
+    job_file = os.path.join(JOBS_CACHE_DIR, f"{job_id}.json")
+    try:
+        with open(job_file, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except Exception as e:
+        print(f"Error saving job {job_id}: {e}")
+
+def get_job_status(job_id):
+    job_file = os.path.join(JOBS_CACHE_DIR, f"{job_id}.json")
+    if os.path.exists(job_file):
+        try:
+            with open(job_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"status": "not_found", "progress": "0%"}
 
 def parse_time(time_str):
     if not time_str:
@@ -37,7 +53,7 @@ def health_check():
     return jsonify({
         "status": "online",
         "service": "Roblox Cloud Music Bridge API",
-        "version": "1.0",
+        "version": "1.2",
         "endpoints": ["/search", "/download", "/job_status", "/stream/<filename>"]
     })
 
@@ -56,7 +72,8 @@ def search_youtube():
             f"ytsearch{max_results}:{query}",
             "--dump-single-json",
             "--flat-playlist",
-            "--no-warnings"
+            "--no-warnings",
+            "--extractor-args", "youtube:player_client=android,web"
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
         if result.returncode == 0 and result.stdout:
@@ -83,18 +100,21 @@ def async_download_job(job_id, url):
     filename = f"{job_id}.mp3"
     filepath = os.path.join(AUDIO_CACHE_DIR, filename)
 
-    DOWNLOAD_JOBS[job_id] = {
+    save_job_status(job_id, {
         "status": "downloading",
         "url": url,
         "progress": "0%",
         "filename": filename
-    }
+    })
 
     cmd = [
         "yt-dlp",
         "-o", os.path.join(AUDIO_CACHE_DIR, f"{job_id}.%(ext)s"),
         "-x", "--audio-format", "mp3",
         "--newline",
+        "--no-playlist",
+        "--no-check-certificates",
+        "--extractor-args", "youtube:player_client=android,web",
         url
     ]
 
@@ -105,19 +125,33 @@ def async_download_job(job_id, url):
             if "[download]" in line_str and "%" in line_str:
                 match = re.search(r'(\d+(?:\.\d+)?%)', line_str)
                 if match:
-                    DOWNLOAD_JOBS[job_id]["progress"] = match.group(1)
+                    save_job_status(job_id, {
+                        "status": "downloading",
+                        "url": url,
+                        "progress": match.group(1),
+                        "filename": filename
+                    })
         process.wait()
 
         if process.returncode == 0 and os.path.exists(filepath):
-            DOWNLOAD_JOBS[job_id]["status"] = "completed"
-            DOWNLOAD_JOBS[job_id]["progress"] = "100%"
-            host_url = request.host_url.rstrip("/") if request else ""
-            DOWNLOAD_JOBS[job_id]["stream_url"] = f"/stream/{filename}"
+            save_job_status(job_id, {
+                "status": "completed",
+                "progress": "100%",
+                "filename": filename,
+                "stream_url": f"/stream/{filename}"
+            })
         else:
-            DOWNLOAD_JOBS[job_id]["status"] = "failed"
+            save_job_status(job_id, {
+                "status": "failed",
+                "progress": "0%",
+                "error": "yt-dlp execution failed"
+            })
     except Exception as e:
-        DOWNLOAD_JOBS[job_id]["status"] = "failed"
-        DOWNLOAD_JOBS[job_id]["error"] = str(e)
+        save_job_status(job_id, {
+            "status": "failed",
+            "progress": "0%",
+            "error": str(e)
+        })
 
 @app.route("/download", methods=["POST"])
 def trigger_download():
@@ -139,8 +173,7 @@ def trigger_download():
 @app.route("/job_status", methods=["GET"])
 def check_job_status():
     job_id = request.args.get("id", "").strip()
-    job_info = DOWNLOAD_JOBS.get(job_id, {"status": "not_found", "progress": "0%"})
-    return jsonify(job_info)
+    return jsonify(get_job_status(job_id))
 
 @app.route("/stream/<filename>", methods=["GET"])
 def stream_audio(filename):
