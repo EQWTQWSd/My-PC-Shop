@@ -1,10 +1,11 @@
 """
-Cloud Music Bridge API v1.2 (24/7 Hosted Service - Enhanced YouTube Cloud Bypass)
-Supports YouTube Search, MP3 Audio Extraction with Android Client Bypass, Shared Job Tracking across Gunicorn Workers, and Direct HTTP Audio Streaming.
+Cloud Music Bridge API v1.3 (Production Cloud Version with YouTube Cloud Bypass)
+Supports YouTube Search, MP3 Audio Extraction via mweb/android clients, File-Based Job Storage, and Direct Audio Streaming.
 """
 
 import os
 import re
+import sys
 import uuid
 import json
 import threading
@@ -18,6 +19,16 @@ CORS(app)
 AUDIO_CACHE_DIR = os.path.join(os.getcwd(), "audio_cache")
 JOBS_CACHE_DIR = os.path.join(AUDIO_CACHE_DIR, "jobs")
 os.makedirs(JOBS_CACHE_DIR, exist_ok=True)
+
+def auto_update_ytdlp():
+    try:
+        print("[Cloud API] Checking for yt-dlp updates...")
+        subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"], check=False)
+    except Exception as e:
+        print(f"[Cloud API] Notice: yt-dlp update check: {e}")
+
+# Run update in background thread at launch
+threading.Thread(target=auto_update_ytdlp, daemon=True).start()
 
 def save_job_status(job_id, data):
     job_file = os.path.join(JOBS_CACHE_DIR, f"{job_id}.json")
@@ -53,7 +64,7 @@ def health_check():
     return jsonify({
         "status": "online",
         "service": "Roblox Cloud Music Bridge API",
-        "version": "1.2",
+        "version": "1.3",
         "endpoints": ["/search", "/download", "/job_status", "/stream/<filename>"]
     })
 
@@ -73,7 +84,8 @@ def search_youtube():
             "--dump-single-json",
             "--flat-playlist",
             "--no-warnings",
-            "--extractor-args", "youtube:player_client=android,web"
+            "--force-ipv4",
+            "--extractor-args", "youtube:player_client=mweb,android"
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
         if result.returncode == 0 and result.stdout:
@@ -114,7 +126,9 @@ def async_download_job(job_id, url):
         "--newline",
         "--no-playlist",
         "--no-check-certificates",
-        "--extractor-args", "youtube:player_client=android,web",
+        "--force-ipv4",
+        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "--extractor-args", "youtube:player_client=mweb,android",
         url
     ]
 
@@ -122,6 +136,7 @@ def async_download_job(job_id, url):
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="ignore")
         for line in process.stdout:
             line_str = line.strip()
+            print(f"[Job {job_id}] {line_str}")
             if "[download]" in line_str and "%" in line_str:
                 match = re.search(r'(\d+(?:\.\d+)?%)', line_str)
                 if match:
@@ -144,7 +159,7 @@ def async_download_job(job_id, url):
             save_job_status(job_id, {
                 "status": "failed",
                 "progress": "0%",
-                "error": "yt-dlp execution failed"
+                "error": f"yt-dlp exit code {process.returncode}"
             })
     except Exception as e:
         save_job_status(job_id, {

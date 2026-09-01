@@ -11,7 +11,8 @@ WORKDIR /app
 
 # Copy Requirements & Install Python Packages
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade -r requirements.txt
+RUN pip install --no-cache-dir --upgrade yt-dlp
 
 # Copy Application Code
 COPY . .
