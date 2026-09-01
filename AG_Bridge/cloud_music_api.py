@@ -1,6 +1,6 @@
 """
-Cloud Music Bridge API v1.4 (Production Cloud Version with Real-time Server Log System)
-Supports YouTube Search, MP3 Audio Extraction, Shared Job Tracking, Direct Audio Streaming, and Remote /logs Viewing.
+Cloud Music Bridge API v1.6 (Production Cloud Version - Anti-Bot Bypass Edition)
+Supports YouTube Search, MP3 Audio Extraction via android/ios/mweb client skip, Disk-Based Logging, and Direct HTTP Audio Streaming.
 """
 
 import os
@@ -22,27 +22,17 @@ JOBS_CACHE_DIR = os.path.join(AUDIO_CACHE_DIR, "jobs")
 LOG_FILE_PATH = os.path.join(os.getcwd(), "server_logs.txt")
 os.makedirs(JOBS_CACHE_DIR, exist_ok=True)
 
-# Log Recording System
-MAX_LOG_ENTRIES = 200
-SYSTEM_LOGS = []
-LOG_LOCK = threading.Lock()
-
 def log_event(level, message):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     formatted_log = f"[{timestamp}] [{level.upper()}] {message}"
     print(formatted_log, flush=True)
-    
-    with LOG_LOCK:
-        SYSTEM_LOGS.append(formatted_log)
-        if len(SYSTEM_LOGS) > MAX_LOG_ENTRIES:
-            SYSTEM_LOGS.pop(0)
-        try:
-            with open(LOG_FILE_PATH, "a", encoding="utf-8") as f:
-                f.write(formatted_log + "\n")
-        except Exception:
-            pass
+    try:
+        with open(LOG_FILE_PATH, "a", encoding="utf-8") as f:
+            f.write(formatted_log + "\n")
+    except Exception as e:
+        print(f"Error writing log file: {e}")
 
-log_event("INFO", "=== Cloud Music Bridge API Server v1.4 Initialized ===")
+log_event("INFO", "=== Cloud Music Bridge API Server v1.6 Initialized ===")
 
 def auto_update_ytdlp():
     try:
@@ -91,32 +81,35 @@ def health_check():
     return jsonify({
         "status": "online",
         "service": "Roblox Cloud Music Bridge API",
-        "version": "1.4",
+        "version": "1.6",
         "endpoints": ["/search", "/download", "/job_status", "/stream/<filename>", "/logs", "/logs/clear"]
     })
 
 @app.route("/logs", methods=["GET"])
 def view_server_logs():
     limit = request.args.get("limit", 100, type=int)
-    with LOG_LOCK:
-        recent_logs = SYSTEM_LOGS[-limit:]
+    logs = []
+    if os.path.exists(LOG_FILE_PATH):
+        try:
+            with open(LOG_FILE_PATH, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+                logs = [line.strip() for line in lines if line.strip()][-limit:]
+        except Exception as e:
+            logs = [f"Error reading log file: {e}"]
     return jsonify({
         "status": "success",
-        "total_logs": len(SYSTEM_LOGS),
-        "logs": recent_logs
+        "total_logs": len(logs),
+        "logs": logs
     })
 
 @app.route("/logs/clear", methods=["GET", "POST"])
 def clear_server_logs():
-    global SYSTEM_LOGS
-    with LOG_LOCK:
-        SYSTEM_LOGS = []
-        try:
-            with open(LOG_FILE_PATH, "w", encoding="utf-8") as f:
-                f.write(f"[{datetime.datetime.now()}] [INFO] Logs cleared.\n")
-        except Exception:
-            pass
-    log_event("INFO", "Server logs have been cleared.")
+    try:
+        with open(LOG_FILE_PATH, "w", encoding="utf-8") as f:
+            f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [INFO] Logs cleared.\n")
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    log_event("INFO", "Server logs cleared.")
     return jsonify({"status": "success", "message": "Logs cleared successfully"})
 
 @app.route("/search", methods=["POST"])
@@ -139,7 +132,8 @@ def search_youtube():
             "--flat-playlist",
             "--no-warnings",
             "--force-ipv4",
-            "--extractor-args", "youtube:player_client=mweb,android"
+            "--extractor-args", "youtube:player_skip=web,web_creator",
+            "--extractor-args", "youtube:player_client=android,ios,mweb"
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
         if result.returncode == 0 and result.stdout:
@@ -186,7 +180,8 @@ def async_download_job(job_id, url):
         "--no-check-certificates",
         "--force-ipv4",
         "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "--extractor-args", "youtube:player_client=mweb,android",
+        "--extractor-args", "youtube:player_skip=web,web_creator",
+        "--extractor-args", "youtube:player_client=android,ios,mweb",
         url
     ]
 
@@ -212,7 +207,7 @@ def async_download_job(job_id, url):
         process.wait()
 
         if process.returncode == 0 and os.path.exists(filepath):
-            log_event("INFO", f"Job {job_id}: Download and conversion COMPLETED -> {filename}")
+            log_event("INFO", f"Job {job_id}: Download COMPLETED -> {filename}")
             save_job_status(job_id, {
                 "status": "completed",
                 "progress": "100%",
@@ -244,8 +239,12 @@ def trigger_download():
         log_event("WARNING", "Download request rejected: missing URL")
         return jsonify({"error": "Missing 'url' parameter"}), 400
 
+    if not url.startswith("http://") and not url.startswith("https://"):
+        log_event("INFO", f"Search term passed instead of URL, prepending ytsearch: '{url}'")
+        url = f"ytsearch1:{url}"
+
     job_id = str(uuid.uuid4())[:8]
-    log_event("INFO", f"Created Download Job {job_id} for URL: {url}")
+    log_event("INFO", f"Created Download Job {job_id} for: {url}")
     threading.Thread(target=async_download_job, args=(job_id, url), daemon=True).start()
 
     return jsonify({
