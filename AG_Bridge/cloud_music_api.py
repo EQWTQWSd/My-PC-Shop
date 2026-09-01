@@ -1,6 +1,6 @@
 """
-Cloud Music Bridge API v1.3 (Production Cloud Version with YouTube Cloud Bypass)
-Supports YouTube Search, MP3 Audio Extraction via mweb/android clients, File-Based Job Storage, and Direct Audio Streaming.
+Cloud Music Bridge API v1.4 (Production Cloud Version with Real-time Server Log System)
+Supports YouTube Search, MP3 Audio Extraction, Shared Job Tracking, Direct Audio Streaming, and Remote /logs Viewing.
 """
 
 import os
@@ -8,6 +8,7 @@ import re
 import sys
 import uuid
 import json
+import datetime
 import threading
 import subprocess
 from flask import Flask, request, jsonify, send_file
@@ -18,16 +19,42 @@ CORS(app)
 
 AUDIO_CACHE_DIR = os.path.join(os.getcwd(), "audio_cache")
 JOBS_CACHE_DIR = os.path.join(AUDIO_CACHE_DIR, "jobs")
+LOG_FILE_PATH = os.path.join(os.getcwd(), "server_logs.txt")
 os.makedirs(JOBS_CACHE_DIR, exist_ok=True)
+
+# Log Recording System
+MAX_LOG_ENTRIES = 200
+SYSTEM_LOGS = []
+LOG_LOCK = threading.Lock()
+
+def log_event(level, message):
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    formatted_log = f"[{timestamp}] [{level.upper()}] {message}"
+    print(formatted_log, flush=True)
+    
+    with LOG_LOCK:
+        SYSTEM_LOGS.append(formatted_log)
+        if len(SYSTEM_LOGS) > MAX_LOG_ENTRIES:
+            SYSTEM_LOGS.pop(0)
+        try:
+            with open(LOG_FILE_PATH, "a", encoding="utf-8") as f:
+                f.write(formatted_log + "\n")
+        except Exception:
+            pass
+
+log_event("INFO", "=== Cloud Music Bridge API Server v1.4 Initialized ===")
 
 def auto_update_ytdlp():
     try:
-        print("[Cloud API] Checking for yt-dlp updates...")
-        subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"], check=False)
+        log_event("INFO", "Checking for yt-dlp updates...")
+        res = subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"], capture_output=True, text=True)
+        if res.returncode == 0:
+            log_event("INFO", "yt-dlp is updated to the latest version.")
+        else:
+            log_event("WARNING", f"yt-dlp update notice: {res.stderr[:200]}")
     except Exception as e:
-        print(f"[Cloud API] Notice: yt-dlp update check: {e}")
+        log_event("ERROR", f"Failed to check yt-dlp update: {e}")
 
-# Run update in background thread at launch
 threading.Thread(target=auto_update_ytdlp, daemon=True).start()
 
 def save_job_status(job_id, data):
@@ -36,7 +63,7 @@ def save_job_status(job_id, data):
         with open(job_file, "w", encoding="utf-8") as f:
             json.dump(data, f)
     except Exception as e:
-        print(f"Error saving job {job_id}: {e}")
+        log_event("ERROR", f"Error saving job {job_id}: {e}")
 
 def get_job_status(job_id):
     job_file = os.path.join(JOBS_CACHE_DIR, f"{job_id}.json")
@@ -44,8 +71,8 @@ def get_job_status(job_id):
         try:
             with open(job_file, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            log_event("ERROR", f"Failed reading job file {job_id}: {e}")
     return {"status": "not_found", "progress": "0%"}
 
 def parse_time(time_str):
@@ -64,9 +91,33 @@ def health_check():
     return jsonify({
         "status": "online",
         "service": "Roblox Cloud Music Bridge API",
-        "version": "1.3",
-        "endpoints": ["/search", "/download", "/job_status", "/stream/<filename>"]
+        "version": "1.4",
+        "endpoints": ["/search", "/download", "/job_status", "/stream/<filename>", "/logs", "/logs/clear"]
     })
+
+@app.route("/logs", methods=["GET"])
+def view_server_logs():
+    limit = request.args.get("limit", 100, type=int)
+    with LOG_LOCK:
+        recent_logs = SYSTEM_LOGS[-limit:]
+    return jsonify({
+        "status": "success",
+        "total_logs": len(SYSTEM_LOGS),
+        "logs": recent_logs
+    })
+
+@app.route("/logs/clear", methods=["GET", "POST"])
+def clear_server_logs():
+    global SYSTEM_LOGS
+    with LOG_LOCK:
+        SYSTEM_LOGS = []
+        try:
+            with open(LOG_FILE_PATH, "w", encoding="utf-8") as f:
+                f.write(f"[{datetime.datetime.now()}] [INFO] Logs cleared.\n")
+        except Exception:
+            pass
+    log_event("INFO", "Server logs have been cleared.")
+    return jsonify({"status": "success", "message": "Logs cleared successfully"})
 
 @app.route("/search", methods=["POST"])
 def search_youtube():
@@ -75,7 +126,10 @@ def search_youtube():
     max_results = int(data.get("max_results", 5))
 
     if not query:
+        log_event("WARNING", "Search request rejected: missing query")
         return jsonify({"error": "Missing 'query' parameter"}), 400
+
+    log_event("INFO", f"Searching YouTube for: '{query}'")
 
     try:
         cmd = [
@@ -102,16 +156,20 @@ def search_youtube():
                         "uploader": entry.get("uploader") or entry.get("channel", "YouTube"),
                         "duration": parse_time(entry.get("duration"))
                     })
+            log_event("INFO", f"Search succeeded for '{query}', found {len(results)} items")
             return jsonify({"status": "success", "results": results})
         else:
-            return jsonify({"status": "error", "message": "No search results found"}), 404
+            log_event("ERROR", f"Search failed for '{query}': {result.stderr[:200]}")
+            return jsonify({"status": "error", "message": "No search results found", "details": result.stderr[:200]}), 404
     except Exception as e:
+        log_event("ERROR", f"Exception during search for '{query}': {e}")
         return jsonify({"error": str(e)}), 500
 
 def async_download_job(job_id, url):
     filename = f"{job_id}.mp3"
     filepath = os.path.join(AUDIO_CACHE_DIR, filename)
 
+    log_event("INFO", f"Job {job_id}: Starting audio download for URL: {url}")
     save_job_status(job_id, {
         "status": "downloading",
         "url": url,
@@ -134,9 +192,11 @@ def async_download_job(job_id, url):
 
     try:
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="ignore")
+        last_error_log = ""
         for line in process.stdout:
             line_str = line.strip()
-            print(f"[Job {job_id}] {line_str}")
+            if line_str:
+                last_error_log = line_str
             if "[download]" in line_str and "%" in line_str:
                 match = re.search(r'(\d+(?:\.\d+)?%)', line_str)
                 if match:
@@ -146,9 +206,13 @@ def async_download_job(job_id, url):
                         "progress": match.group(1),
                         "filename": filename
                     })
+            elif "ERROR:" in line_str or "WARNING:" in line_str:
+                log_event("WARNING", f"Job {job_id}: {line_str}")
+
         process.wait()
 
         if process.returncode == 0 and os.path.exists(filepath):
+            log_event("INFO", f"Job {job_id}: Download and conversion COMPLETED -> {filename}")
             save_job_status(job_id, {
                 "status": "completed",
                 "progress": "100%",
@@ -156,12 +220,15 @@ def async_download_job(job_id, url):
                 "stream_url": f"/stream/{filename}"
             })
         else:
+            err_msg = f"yt-dlp exit code {process.returncode}: {last_error_log[:150]}"
+            log_event("ERROR", f"Job {job_id} FAILED: {err_msg}")
             save_job_status(job_id, {
                 "status": "failed",
                 "progress": "0%",
-                "error": f"yt-dlp exit code {process.returncode}"
+                "error": err_msg
             })
     except Exception as e:
+        log_event("ERROR", f"Job {job_id} Exception: {e}")
         save_job_status(job_id, {
             "status": "failed",
             "progress": "0%",
@@ -174,9 +241,11 @@ def trigger_download():
     url = data.get("url", "").strip()
 
     if not url:
+        log_event("WARNING", "Download request rejected: missing URL")
         return jsonify({"error": "Missing 'url' parameter"}), 400
 
     job_id = str(uuid.uuid4())[:8]
+    log_event("INFO", f"Created Download Job {job_id} for URL: {url}")
     threading.Thread(target=async_download_job, args=(job_id, url), daemon=True).start()
 
     return jsonify({
@@ -194,10 +263,12 @@ def check_job_status():
 def stream_audio(filename):
     filepath = os.path.join(AUDIO_CACHE_DIR, filename)
     if os.path.exists(filepath):
+        log_event("INFO", f"Streaming file to client: {filename}")
         return send_file(filepath, mimetype="audio/mpeg")
+    log_event("WARNING", f"Stream requested for missing file: {filename}")
     return jsonify({"error": "File not found"}), 404
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8081))
-    print(f"[Cloud API] Starting server on port {port}...")
+    log_event("INFO", f"Starting Flask server on port {port}...")
     app.run(host="0.0.0.0", port=port)
